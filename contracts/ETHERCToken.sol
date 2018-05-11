@@ -90,6 +90,51 @@ contract Ownable {
 
 
 /**
+ * @title Pausable
+ * @dev Base contract which allows children to implement an emergency stop mechanism.
+ */
+contract Pausable is Ownable {
+    event Pause();
+    event Unpause();
+
+    bool public paused = false;
+
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is not paused.
+     */
+    modifier whenNotPaused() {
+        require(!paused);
+        _;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is paused.
+     */
+    modifier whenPaused() {
+        require(paused);
+        _;
+    }
+
+    /**
+     * @dev called by the owner to pause, triggers stopped state
+     */
+    function pause() onlyOwner whenNotPaused public {
+        paused = true;
+        Pause();
+    }
+
+    /**
+     * @dev called by the owner to unpause, returns to normal state
+     */
+    function unpause() onlyOwner whenPaused public {
+        paused = false;
+        Unpause();
+    }
+}
+
+
+/**
  * @title ERC20Basic
  * @dev Simpler version of ERC20 interface
  * @dev see https://github.com/ethereum/EIPs/issues/179
@@ -160,39 +205,17 @@ contract BasicToken is ERC20Basic {
 }
 
 
-contract ETHERCToken is ERC20, BasicToken, Ownable {
-
-    uint8 public constant decimals = 18;
-    string public constant name = "ETHERCToken";
-    string public constant symbol = "EET";
-    uint256 public constant INITIAL_SUPPLY = 1000000000 * (10 ** uint256(decimals));
-    string public welcome;
-    address public admin;
+/**
+ * @title Standard ERC20 token
+ *
+ * @dev Implementation of the basic standard token.
+ * @dev https://github.com/ethereum/EIPs/issues/20
+ * @dev Based on code by FirstBlood: https://github.com/Firstbloodio/token/blob/master/smart_contract/FirstBloodToken.sol
+ */
+contract StandardToken is ERC20, BasicToken {
 
     mapping (address => mapping (address => uint256)) internal allowed;
 
-    event Burn(address indexed burner, uint256 value);
-
-    function ETHERCToken() public {
-        admin = owner;
-        totalSupply_ = INITIAL_SUPPLY;
-        balances[owner] = INITIAL_SUPPLY;
-        Transfer(address(0), msg.sender, INITIAL_SUPPLY);
-    }
-
-    function changeAdmin(address _user) public onlyOwner {
-        require(_user != address(0));
-        admin = _user;
-    }
-
-    modifier onlyAdmin() {
-        require(msg.sender == owner || msg.sender == admin);
-        _;
-    }
-
-    function changeWelcome(string _welcome) public onlyAdmin {
-        welcome = _welcome;
-    }
 
     /**
      * @dev Transfer tokens from one address to another
@@ -275,6 +298,69 @@ contract ETHERCToken is ERC20, BasicToken, Ownable {
         return true;
     }
 
+}
+
+
+/**
+ * @title Pausable token
+ * @dev StandardToken modified with pausable transfers.
+ **/
+contract PausableToken is StandardToken, Pausable {
+
+    function transfer(address _to, uint256 _value) public whenNotPaused returns (bool) {
+        return super.transfer(_to, _value);
+    }
+
+    function transferFrom(address _from, address _to, uint256 _value) public whenNotPaused returns (bool) {
+        return super.transferFrom(_from, _to, _value);
+    }
+
+    function approve(address _spender, uint256 _value) public whenNotPaused returns (bool) {
+        return super.approve(_spender, _value);
+    }
+
+    function increaseApproval(address _spender, uint _addedValue) public whenNotPaused returns (bool success) {
+        return super.increaseApproval(_spender, _addedValue);
+    }
+
+    function decreaseApproval(address _spender, uint _subtractedValue) public whenNotPaused returns (bool success) {
+        return super.decreaseApproval(_spender, _subtractedValue);
+    }
+}
+
+
+contract ETHERCToken is PausableToken {
+
+    uint8 public constant decimals = 18;
+    string public constant name = "ETHERCToken";
+    string public constant symbol = "EET";
+    uint256 public constant TOTAL_SUPPLY = 1000000000 * (10 ** uint256(decimals));
+    string public welcome;
+    address public admin;
+
+    event Burn(address indexed burner, uint256 value);
+
+    function ETHERCToken() public {
+        admin = owner;
+        totalSupply_ = TOTAL_SUPPLY;
+        balances[owner] = TOTAL_SUPPLY;
+        Transfer(address(0), msg.sender, TOTAL_SUPPLY);
+    }
+
+    function changeAdmin(address _admin) public onlyOwner {
+        require(_admin != address(0));
+        admin = _admin;
+    }
+
+    modifier onlyAdmin() {
+        require(msg.sender == owner || msg.sender == admin);
+        _;
+    }
+
+    function changeWelcome(string _welcome) public onlyAdmin {
+        welcome = _welcome;
+    }
+
     /**
      * @dev Burns a specific amount of tokens.
      * @param _value The amount of token to be burned.
@@ -305,13 +391,13 @@ contract ETHERCToken is ERC20, BasicToken, Ownable {
         }
         require(total <= balances[msg.sender]);
 
+        // SafeMath.sub will throw if there is not enough balance.
+        balances[msg.sender] = balances[msg.sender].sub(total);
+
         for (uint256 j = 0; j < _recipients.length; j++) {
             balances[_recipients[j]] = balances[_recipients[j]].add(_values[j]);
             Transfer(msg.sender, _recipients[j], _values[j]);
         }
-
-        // SafeMath.sub will throw if there is not enough balance.
-        balances[msg.sender] = balances[msg.sender].sub(total);
         
         return true;
     }
